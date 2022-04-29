@@ -20,7 +20,14 @@ spaces :: Parser ()
 spaces = skipMany1 space
 
 parseExpr :: Parser LispVal
-parseExpr = parseAtom <|> parseString <|> parseNumber <|> parseChar <|> parseFloat
+parseExpr =
+  parseAtom
+    <|> parseString
+    <|> parseNumber
+    <|> parseChar
+    <|> parseFloat
+    <|> parseQuoted
+    <|> parseListWrap
 
 readExpr :: String -> Either ParseError LispVal
 readExpr = parse parseExpr "lisp"
@@ -106,3 +113,20 @@ parseFloat =
       ( string "#i" >> many1 (digit <|> char '.')
           >>= liftReadS readFloat
       )
+
+parseList :: Parser LispVal
+parseList = List <$> sepBy parseExpr spaces
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+  head <- endBy parseExpr spaces
+  tail <- char '.' >> spaces >> parseExpr
+  return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = List . (Atom "quote" :) . singleton <$> (char '\'' >> parseExpr)
+  where
+    singleton x = [x]
+
+parseListWrap :: Parser LispVal
+parseListWrap = char '(' >> (try parseList <|> parseDottedList) <* char ')'
