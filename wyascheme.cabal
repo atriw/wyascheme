@@ -30,6 +30,27 @@ executable wyascheme
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
     build-depends:    base ^>=4.14.3.0,
-                      parsec
+                      parse-lisp
     hs-source-dirs:   app
     default-language: Haskell2010
+
+library parse-lisp
+   exposed-modules:
+    Lisp
+   build-depends:    base ^>=4.14.3.0,
+                     parsec
+   hs-source-dirs:   lib/parse
+   default-language: Haskell2010
+
+test-suite test-parse-lisp
+   type: exitcode-stdio-1.0
+   main-is: Test.hs
+   hs-source-dirs:  tests/parse
+   default-language: Haskell2010
+   build-depends:    base ^>=4.14.3.0,
+                     tasty >= 0.11 && < 1.4,
+                     hspec,
+                     raw-strings-qq,
+                     tasty-hspec,
+                     parsec,
+                     parse-lisp

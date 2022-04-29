@@ -4,14 +4,21 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, lib }:
+  f = { mkDerivation, base, hspec, lib, parsec, raw-strings-qq
+      , tasty, tasty-hspec
+      }:
       mkDerivation {
         pname = "wyascheme";
         version = "0.1.0.0";
         src = ./.;
         isLibrary = false;
         isExecutable = true;
+        libraryHaskellDepends = [ base parsec ];
         executableHaskellDepends = [ base ];
+        testHaskellDepends = [
+          base hspec parsec raw-strings-qq tasty tasty-hspec
+        ];
+        doHaddock = false;
         license = "unknown";
         hydraPlatforms = lib.platforms.none;
       };
