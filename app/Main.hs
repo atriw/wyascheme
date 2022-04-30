@@ -1,6 +1,6 @@
 module Main where
 
-import Lisp
+import Parse
 
 main :: IO ()
 main = run

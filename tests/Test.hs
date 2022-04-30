@@ -6,7 +6,7 @@ import Test.Hspec
 import Text.RawString.QQ
 
 import Text.Parsec
-import Lisp
+import Parse
 import Data.Either (isLeft)
 
 main :: IO()
