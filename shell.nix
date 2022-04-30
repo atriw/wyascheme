@@ -4,7 +4,7 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, hspec, lib, parsec, raw-strings-qq
+  f = { mkDerivation, base, hspec, lib, mtl, parsec, raw-strings-qq
       , tasty, tasty-hspec
       }:
       mkDerivation {
@@ -13,7 +13,7 @@ let
         src = ./.;
         isLibrary = false;
         isExecutable = true;
-        libraryHaskellDepends = [ base parsec ];
+        libraryHaskellDepends = [ base mtl parsec ];
         executableHaskellDepends = [ base ];
         testHaskellDepends = [
           base hspec parsec raw-strings-qq tasty tasty-hspec

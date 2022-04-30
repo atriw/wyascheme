@@ -5,39 +5,20 @@ import Data.Maybe (fromMaybe)
 import Numeric (readFloat, readHex, readOct)
 import Text.ParserCombinators.Parsec hiding (spaces)
 
+import Types
+import Control.Monad.Except (MonadError(throwError))
+import Control.Monad (void)
+
 spaces :: Parser ()
 spaces = skipMany1 space
 
 parseExpr :: Parser LispVal
 parseExpr = choice [parseString, parseNumber, parseChar, parseFloat, parseQuoted, parseListWrap, parseAtom]
 
-readExpr :: String -> Either ParseError LispVal
-readExpr = parse parseExpr "lisp"
-
-data LispVal
-  = Atom String
-  | List [LispVal]
-  | DottedList [LispVal] LispVal
-  | Number Integer
-  | String String
-  | Bool Bool
-  | Char Char
-  | Float Float
-  deriving Eq
-
-unwordsList :: [LispVal] -> String
-unwordsList = unwords . map show
-
-instance Show LispVal where
-  show (Atom s) = s
-  show (List contents) = "(" ++ unwordsList contents ++ ")"
-  show (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
-  show (Number s) = show s
-  show (String s) = "\"" ++ s ++ "\""
-  show (Bool True) = "#t"
-  show (Bool False) = "#f"
-  show (Char c) = "'" ++ [c] ++ "'"
-  show (Float f) = show f
+readExpr :: String -> ThrowsError LispVal
+readExpr expr = case parse parseExpr "lisp" expr of
+  Left err -> throwError $ Parser err
+  Right val -> return val
 
 parseString :: Parser LispVal
 parseString = do
@@ -91,7 +72,7 @@ parseChar :: Parser LispVal
 parseChar = try (string "#\\" >> choice (try <$> [parseCharName, parseCharLit]))
   where
     endWithSep :: Parser ()
-    endWithSep = lookAhead (choice [eof, char ' ' >> pure (), char '(' >> pure ()])
+    endWithSep = lookAhead (choice [eof, void (char ' '), void (char '(')])
     parseCharLit :: Parser LispVal
     parseCharLit = Char <$> ((letter <|> symbol) <* lookAhead endWithSep)
     charNames = [("space", ' '), ("newline", '\n')]

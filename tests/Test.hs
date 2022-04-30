@@ -8,6 +8,7 @@ import Text.RawString.QQ
 import Text.Parsec
 import Parse
 import Eval
+import Types
 import Data.Either (isLeft)
 
 main :: IO()
@@ -109,18 +110,18 @@ spec_eval :: Spec
 spec_eval =
   describe "eval primitives" $ do
     it "evals String" $ do
-      eval (String "xxx") `shouldBe` String "xxx"
+      eval (String "xxx") `shouldBe` Right (String "xxx")
     it "evals Number" $ do
-      eval (Number 1) `shouldBe` Number 1
+      eval (Number 1) `shouldBe` Right (Number 1)
     it "evals Bool" $ do
-      eval (Bool True) `shouldBe` Bool True
-      eval (Bool False) `shouldBe` Bool False
+      eval (Bool True) `shouldBe` Right (Bool True)
+      eval (Bool False) `shouldBe` Right (Bool False)
     it "evals quoted" $ do
-      eval (List [Atom "quote", Number 1]) `shouldBe` Number 1
+      eval (List [Atom "quote", Number 1]) `shouldBe` Right (Number 1)
     it "evals primitive functions" $ do
-      eval (List [Atom "+", Number 1, Number 2]) `shouldBe` Number 3
-      eval (List [Atom "-", Number 1, Number 10]) `shouldBe` Number (-9)
-      eval (List [Atom "mod", String "21", List [Number 2]]) `shouldBe` Number 1
-      eval (List [Atom "symbol?", Atom "aaa"]) `shouldBe` Bool True
-      eval (List [Atom "string->symbol", String "xxx"]) `shouldBe` Atom "xxx"
-      eval (List [Atom "symbol->string", Atom "xxx"]) `shouldBe` String "xxx"
+      eval (List [Atom "+", Number 1, Number 2]) `shouldBe` Right (Number 3)
+      eval (List [Atom "-", Number 1, Number 10]) `shouldBe` Right (Number (-9))
+      eval (List [Atom "mod", String "21", String "2"]) `shouldBe` Right (Number 1)
+      eval (List [Atom "symbol?", Atom "aaa"]) `shouldBe` Right (Bool True)
+      eval (List [Atom "string->symbol", String "xxx"]) `shouldBe` Right (Atom "xxx")
+      eval (List [Atom "symbol->string", Atom "xxx"]) `shouldBe` Right (String "xxx")

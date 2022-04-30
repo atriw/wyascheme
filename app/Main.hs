@@ -1,7 +1,9 @@
 module Main where
 
-import Parse
+import Control.Monad (unless)
 import Eval
+import Parse
+import Types
 
 main :: IO ()
 main = run
@@ -10,6 +12,5 @@ run :: IO ()
 run = do
   putStrLn "input:"
   input <- getLine
-  case readExpr input of
-    Left err -> print err
-    Right val -> print (eval val) >> run
+  unless (input == "quit")
+    (putStrLn (extractVal $ trapError $ show <$> (readExpr input >>= eval)) >> run)
