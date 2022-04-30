@@ -23,7 +23,21 @@ data LispVal
   | Bool Bool
   | Char Char
   | Float Float
-  deriving (Eq, Show)
+  deriving Eq
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map show
+
+instance Show LispVal where
+  show (Atom s) = s
+  show (List contents) = "(" ++ unwordsList contents ++ ")"
+  show (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
+  show (Number s) = show s
+  show (String s) = "\"" ++ s ++ "\""
+  show (Bool True) = "#t"
+  show (Bool False) = "#f"
+  show (Char c) = "'" ++ [c] ++ "'"
+  show (Float f) = show f
 
 parseString :: Parser LispVal
 parseString = do
@@ -39,7 +53,7 @@ parseString = do
     parseEscape c = escape <$> (char '\\' >> char c)
 
 symbol :: Parser Char
-symbol = oneOf "#+-/*_~"
+symbol = oneOf "?!@$%^&#+-/*_~|:<>="
 
 parseAtom :: Parser LispVal
 parseAtom = do
