@@ -1,9 +1,9 @@
 module Main where
 
 import Control.Monad (unless)
-import Eval
-import Parse
-import Types
+import Lisp.Eval
+import Lisp.Parse
+import Lisp.Types
 
 main :: IO ()
 main = run

@@ -6,9 +6,9 @@ import Test.Hspec
 import Text.RawString.QQ
 
 import Text.Parsec
-import Parse
-import Eval
-import Types
+import Lisp.Parse
+import Lisp.Eval
+import Lisp.Types
 import Data.Either (isLeft)
 
 main :: IO()

@@ -1,11 +1,11 @@
-module Parse where
+module Lisp.Parse where
 
 import Data.Foldable (find)
 import Data.Maybe (fromMaybe)
 import Numeric (readFloat, readHex, readOct)
 import Text.ParserCombinators.Parsec hiding (spaces)
 
-import Types
+import Lisp.Types
 import Control.Monad.Except (MonadError(throwError))
 import Control.Monad (void)
 

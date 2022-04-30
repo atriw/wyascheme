@@ -1,6 +1,6 @@
 -- |
 
-module Types where
+module Lisp.Types where
 
 import Control.Monad.Except
 import Text.ParserCombinators.Parsec (ParseError)

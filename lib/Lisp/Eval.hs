@@ -1,9 +1,9 @@
 -- |
 
-module Eval where
+module Lisp.Eval where
 
-import Parse
-import Types
+import Lisp.Parse
+import Lisp.Types
 import Control.Monad.Except (MonadError(throwError))
 
 eval :: LispVal -> ThrowsError LispVal
