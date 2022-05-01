@@ -125,3 +125,5 @@ spec_eval =
       eval (List [Atom "symbol?", Atom "aaa"]) `shouldBe` Right (Bool True)
       eval (List [Atom "string->symbol", String "xxx"]) `shouldBe` Right (Atom "xxx")
       eval (List [Atom "symbol->string", Atom "xxx"]) `shouldBe` Right (String "xxx")
+      eval (List [Atom "string>?", String "xxx", String "xxy"]) `shouldBe` Right (Bool False)
+      eval (List [Atom "&&", Bool True, Bool False]) `shouldBe` Right (Bool False)

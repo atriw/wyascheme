@@ -4,7 +4,7 @@ module Lisp.Eval where
 
 import Lisp.Parse
 import Lisp.Types
-import Control.Monad.Except (MonadError(throwError))
+import Control.Monad.Except (MonadError(throwError), unless)
 
 eval :: LispVal -> ThrowsError LispVal
 eval val@(String _) = return val
@@ -31,11 +31,37 @@ primitives = [("+", numericBinop (+)),
               ("string?", isString),
               ("number?", isNumber),
               ("string->symbol", stringToSymbol),
-              ("symbol->string", symbolToString)]
+              ("symbol->string", symbolToString),
+              ("=", numBoolBinop (==)),
+              ("/=", numBoolBinop (/=)),
+              ("<", numBoolBinop (<)),
+              (">", numBoolBinop (>)),
+              ("<=", numBoolBinop (<=)),
+              (">=", numBoolBinop (>=)),
+              ("&&", boolBoolBinop (&&)),
+              ("||", boolBoolBinop (||)),
+              ("string=?", strBoolBinop (==)),
+              ("string/=?", strBoolBinop (/=)),
+              ("string<?", strBoolBinop (<)),
+              ("string>?", strBoolBinop (>)),
+              ("string<=?", strBoolBinop (<=)),
+              ("string>=?", strBoolBinop (>=))
+             ]
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
 numericBinop op val@[_] = throwError $ NumArgs 2 val
 numericBinop op params = Number . foldl1 op <$> traverse unpackNum params
+
+boolBinop :: (LispVal -> ThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> ThrowsError LispVal
+boolBinop unpacker op args = do
+  unless (length args == 2) (throwError $ NumArgs 2 args)
+  left <- unpacker $ head args
+  right <- unpacker $ args !! 1
+  return $ Bool $ op left right
+
+numBoolBinop = boolBinop unpackNum
+strBoolBinop = boolBinop unpackStr
+boolBoolBinop = boolBinop unpackBool
 
 unpackNum :: LispVal -> ThrowsError Integer
 unpackNum (Number n) = return n
@@ -44,6 +70,16 @@ unpackNum val@(String n) = let parsed = reads n in
   then throwError $ TypeMismatch "number" val
   else return $ fst $ head parsed
 unpackNum notNum = throwError $ TypeMismatch "number" notNum
+
+unpackStr :: LispVal -> ThrowsError String
+unpackStr (String s) = return s
+unpackStr (Number s) = return $ show s
+unpackStr (Bool s) = return $ show s
+unpackStr notStr = throwError $ TypeMismatch "string" notStr
+
+unpackBool :: LispVal -> ThrowsError Bool
+unpackBool (Bool b) = return b
+unpackBool notBool = throwError $ TypeMismatch "boolean" notBool
 
 isSymbol :: [LispVal] -> ThrowsError LispVal
 isSymbol [Atom _] = return $ Bool True
