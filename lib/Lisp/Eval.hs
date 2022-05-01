@@ -50,7 +50,10 @@ primitives = [("+", numericBinop (+)),
               ("string<?", strBoolBinop (<)),
               ("string>?", strBoolBinop (>)),
               ("string<=?", strBoolBinop (<=)),
-              ("string>=?", strBoolBinop (>=))
+              ("string>=?", strBoolBinop (>=)),
+              ("car", car),
+              ("cdr", cdr),
+              ("cons", cons)
              ]
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
@@ -110,3 +113,23 @@ symbolToString :: [LispVal] -> ThrowsError LispVal
 symbolToString [Atom s] = return $ String s
 symbolToString [val] = throwError $ TypeMismatch "symbol" val
 symbolToString val = throwError $ NumArgs 1 val
+
+car :: [LispVal] -> ThrowsError LispVal
+car [List (x : xs)] = return x
+car [DottedList (x : xs) _] = return x
+car [badArg] = throwError $ TypeMismatch "pair" badArg
+car badArgs = throwError $ NumArgs 1 badArgs
+
+cdr :: [LispVal] -> ThrowsError LispVal
+cdr [List (x : xs)] = return $ List xs
+cdr [DottedList [_] x] = return x
+cdr [DottedList (_ : xs) x] = return $ DottedList xs x
+cdr [badArg] = throwError $ TypeMismatch "pair" badArg
+cdr badArgs = throwError $ NumArgs 1 badArgs
+
+cons :: [LispVal] -> ThrowsError LispVal
+cons [x, List []] = return $ List [x]
+cons [x, List xs] = return $ List (x : xs)
+cons [x, DottedList xs xlast] = return $ DottedList (x : xs) xlast
+cons [x1, x2] = return $ DottedList [x1] x2
+cons badArgs = throwError $ NumArgs 2 badArgs

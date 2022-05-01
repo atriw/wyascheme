@@ -106,6 +106,13 @@ spec_parseQuoted =
     it "parses quoted List" $
       parse parseExpr "" "'(1 #t #f)" `shouldBe` Right (List [Atom "quote",
                                                             List [Number 1, Bool True, Bool False]])
+
+buildFunc :: String -> [LispVal] -> LispVal
+buildFunc f args = List $ Atom f : args
+
+buildQuoted :: LispVal -> LispVal
+buildQuoted v = List [Atom "quote", v]
+
 spec_eval :: Spec
 spec_eval =
   describe "eval primitives" $ do
@@ -117,17 +124,40 @@ spec_eval =
       eval (Bool True) `shouldBe` Right (Bool True)
       eval (Bool False) `shouldBe` Right (Bool False)
     it "evals quoted" $ do
-      eval (List [Atom "quote", Number 1]) `shouldBe` Right (Number 1)
+      eval (buildFunc "quote" [Number 1]) `shouldBe` Right (Number 1)
     it "evals primitive functions" $ do
-      eval (List [Atom "+", Number 1, Number 2]) `shouldBe` Right (Number 3)
-      eval (List [Atom "-", Number 1, Number 10]) `shouldBe` Right (Number (-9))
-      eval (List [Atom "mod", String "21", String "2"]) `shouldBe` Right (Number 1)
-      eval (List [Atom "symbol?", Atom "aaa"]) `shouldBe` Right (Bool True)
-      eval (List [Atom "string->symbol", String "xxx"]) `shouldBe` Right (Atom "xxx")
-      eval (List [Atom "symbol->string", Atom "xxx"]) `shouldBe` Right (String "xxx")
-      eval (List [Atom "string>?", String "xxx", String "xxy"]) `shouldBe` Right (Bool False)
-      eval (List [Atom "&&", Bool True, Bool False]) `shouldBe` Right (Bool False)
+      eval (buildFunc "+" [Number 1, Number 2]) `shouldBe` Right (Number 3)
+      eval (buildFunc "-" [Number 1, Number 10]) `shouldBe` Right (Number (-9))
+      eval (buildFunc "mod" [String "21", String "2"]) `shouldBe` Right (Number 1)
+      eval (buildFunc "symbol?" [Atom "aaa"]) `shouldBe` Right (Bool True)
+      eval (buildFunc "string->symbol" [String "xxx"]) `shouldBe` Right (Atom "xxx")
+      eval (buildFunc "symbol->string" [Atom "xxx"]) `shouldBe` Right (String "xxx")
+      eval (buildFunc "string>?" [String "xxx", String "xxy"]) `shouldBe` Right (Bool False)
+      eval (buildFunc "&&" [Bool True, Bool False]) `shouldBe` Right (Bool False)
     it "evals if" $ do
       eval (List [Atom "if", Bool True, List [Atom "+", Number 2, Number 1], String "xxx"]) `shouldBe` Right (Number 3)
       eval (List [Atom "if", String "", String "xxx", String "yyy"]) `shouldBe` Right (String "xxx")
       eval (List [Atom "if", List [Atom "=", Number 1, Number 2], String "xxx", String "yyy"]) `shouldBe` Right (String "yyy")
+    it "evals car" $ do
+      eval (buildFunc "car" [buildQuoted $ List [Number 1, Number 2]]) `shouldBe` Right (Number 1)
+      eval (buildFunc "car" [buildQuoted $ DottedList [Number 1, Number 2] (Number 3)]) `shouldBe` Right (Number 1)
+      eval (buildFunc "car" [buildQuoted $ List []]) `shouldSatisfy` isLeft
+      eval (buildFunc "car" [String "xxx"]) `shouldSatisfy` isLeft
+      eval (buildFunc "car" []) `shouldSatisfy` isLeft
+      eval (buildFunc "car" [buildQuoted $ List [String "xxx"], String "yyy"]) `shouldSatisfy` isLeft
+    it "evals cdr" $ do
+      eval (buildFunc "cdr" [buildQuoted $ List [Number 1, Number 2, Number 3]]) `shouldBe` Right (List [Number 2, Number 3])
+      eval (buildFunc "cdr" [buildQuoted $ DottedList [Number 1, Number 2] (Number 3)]) `shouldBe` Right (DottedList [Number 2] (Number 3))
+      eval (buildFunc "cdr" [buildQuoted $ DottedList [Number 1] (Number 2)]) `shouldBe` Right (Number 2)
+      eval (buildFunc "cdr" [buildQuoted $ List []]) `shouldSatisfy` isLeft
+      eval (buildFunc "cdr" [String "xxx"]) `shouldSatisfy` isLeft
+      eval (buildFunc "cdr" []) `shouldSatisfy` isLeft
+      eval (buildFunc "cdr" [buildQuoted $ List [String "xxx"], String "yyy"]) `shouldSatisfy` isLeft
+    it "evals cons" $ do
+      eval (buildFunc "cons" [String "xxx", buildQuoted $ List []]) `shouldBe` Right (List [String "xxx"])
+      eval (buildFunc "cons" [String "xxx", buildQuoted $ List [Number 1]]) `shouldBe` Right (List [String "xxx", Number 1])
+      eval (buildFunc "cons" [String "xxx", buildQuoted $ DottedList [Number 1, Number 2] (Number 3)]) `shouldBe` Right (DottedList [String "xxx", Number 1, Number 2] (Number 3))
+      eval (buildFunc "cons" [String "xxx", String "yyy"]) `shouldBe` Right (DottedList [String "xxx"] (String "yyy"))
+      eval (buildFunc "cons" [Number 1]) `shouldSatisfy` isLeft
+      eval (buildFunc "cons" []) `shouldSatisfy` isLeft
+      eval (buildFunc "cons" [Number 1, Number 2, Number 3]) `shouldSatisfy` isLeft
