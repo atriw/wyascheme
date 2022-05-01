@@ -127,3 +127,7 @@ spec_eval =
       eval (List [Atom "symbol->string", Atom "xxx"]) `shouldBe` Right (String "xxx")
       eval (List [Atom "string>?", String "xxx", String "xxy"]) `shouldBe` Right (Bool False)
       eval (List [Atom "&&", Bool True, Bool False]) `shouldBe` Right (Bool False)
+    it "evals if" $ do
+      eval (List [Atom "if", Bool True, List [Atom "+", Number 2, Number 1], String "xxx"]) `shouldBe` Right (Number 3)
+      eval (List [Atom "if", String "", String "xxx", String "yyy"]) `shouldBe` Right (String "xxx")
+      eval (List [Atom "if", List [Atom "=", Number 1, Number 2], String "xxx", String "yyy"]) `shouldBe` Right (String "yyy")
