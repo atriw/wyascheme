@@ -190,3 +190,7 @@ spec_eval =
       evalParse [r|(equal? '(1 2 3) '(1 2 3))|] `shouldBeRight` Bool True
       evalParse [r|(equal? '(1 "2" 3) '(1 2 3))|] `shouldBeRight` Bool True
       evalParse [r|(equal? '(1 "2" 3 . 4) '(1 2 3 . "4"))|] `shouldBeRight` Bool True
+    it "evals cond" $ do
+      evalParse [r|(cond ((equal? 1 2) 3) (#t 4) (else 5))|] `shouldBeRight` Number 4
+      evalParse [r|(cond 1 2 3)|] & shouldFail
+      evalParse [r|(cond (#t 1) 2 (else 3))|] & shouldFail

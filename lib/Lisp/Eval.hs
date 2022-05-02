@@ -19,11 +19,18 @@ eval (List [Atom "if", pred, conseq, alt]) = do
   case result of
     (Bool False) -> eval alt
     _ -> eval conseq
+eval (List (Atom "cond" : clauses)) = eval =<<
+  foldr clauseToIf (return $ Bool False) clauses
+  where
+    clauseToIf _ err@(Left _) = err
+    clauseToIf (List [Atom "else", conseq]) _ = return conseq
+    clauseToIf (List [pred, conseq]) (Right alt) = return $ List [Atom "if", pred, conseq, alt]
+    clauseToIf clause _ = throwError $ BadSpecialForm "Bad cond clause" clause
 eval (List (Atom func : args)) = traverse eval args >>= apply func
 eval badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
-apply func args = maybe (throwError $ NotFunction "Unrecognized primitive fucntion args" func)
+apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)
   ($ args) $ lookup func primitives
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
