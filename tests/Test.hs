@@ -10,6 +10,7 @@ import Lisp.Parse
 import Lisp.Eval
 import Lisp.Types
 import Data.Either (isLeft)
+import Control.Monad ((>=>))
 
 main :: IO()
 main = do
@@ -113,6 +114,9 @@ buildFunc f args = List $ Atom f : args
 buildQuoted :: LispVal -> LispVal
 buildQuoted v = List [Atom "quote", v]
 
+evalParse :: String -> ThrowsError LispVal
+evalParse = readExpr >=> eval
+
 spec_eval :: Spec
 spec_eval =
   describe "eval primitives" $ do
@@ -161,3 +165,15 @@ spec_eval =
       eval (buildFunc "cons" [Number 1]) `shouldSatisfy` isLeft
       eval (buildFunc "cons" []) `shouldSatisfy` isLeft
       eval (buildFunc "cons" [Number 1, Number 2, Number 3]) `shouldSatisfy` isLeft
+    it "evals eq? and eqv?" $ do
+      eval (buildFunc "eq?" [String "xxx", String "xxx"]) `shouldBe` Right (Bool True)
+      eval (buildFunc "eqv?" [String "xxx", String "xxx"]) `shouldBe` Right (Bool True)
+      eval (buildFunc "eq?" [String "xxx", String "yyy"]) `shouldBe` Right (Bool False)
+      eval (buildFunc "eqv?" [String "xxx", String "yyy"]) `shouldBe` Right (Bool False)
+      eval (buildFunc "eq?" [String "xxx", Atom "yyy"]) `shouldBe` Right (Bool False)
+      eval (buildFunc "eqv?" [String "xxx", Atom "yyy"]) `shouldBe` Right (Bool False)
+      eval (buildFunc "eq?" [buildQuoted $ List [Number 1, String "xxx"], buildQuoted $ List [Number 1, String "xxx"]]) `shouldBe` Right (Bool True)
+      eval (buildFunc "eq?" [buildQuoted $ List [Number 1, String "xxx"], buildQuoted $ List [Number 1, Number 2]]) `shouldBe` Right (Bool False)
+      evalParse [r|(eq? '(1 2 3 . 4) '(1 2 3 . 4))|] `shouldBe` Right (Bool True)
+      evalParse [r|(eq? '(1 3 . 4) '(1 2 3 . 4))|] `shouldBe` Right (Bool False)
+      evalParse [r|(eq? 1)|] `shouldSatisfy` isLeft

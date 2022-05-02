@@ -53,7 +53,9 @@ primitives = [("+", numericBinop (+)),
               ("string>=?", strBoolBinop (>=)),
               ("car", car),
               ("cdr", cdr),
-              ("cons", cons)
+              ("cons", cons),
+              ("eq?", eqv),
+              ("eqv?", eqv)
              ]
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
@@ -133,3 +135,20 @@ cons [x, List xs] = return $ List (x : xs)
 cons [x, DottedList xs xlast] = return $ DottedList (x : xs) xlast
 cons [x1, x2] = return $ DottedList [x1] x2
 cons badArgs = throwError $ NumArgs 2 badArgs
+
+eqv :: [LispVal] -> ThrowsError LispVal
+eqv [Atom a, Atom b] = return $ Bool $ a == b
+eqv [Number a, Number b] = return $ Bool $ a == b
+eqv [String a, String b] = return $ Bool $ a == b
+eqv [Bool a, Bool b] = return $ Bool $ a == b
+eqv [Char a, Char b] = return $ Bool $ a == b
+eqv [Float a, Float b] = return $ Bool $ a == b
+eqv [List a, List b] = return $ Bool $ length a == length b &&
+  all eqvPair (zip a b)
+  where
+    eqvPair (a, b) = case eqv [a, b] of
+      Right (Bool val) -> val
+      _ -> False
+eqv [DottedList a alast, DottedList b blast] = eqv [List (a ++ [alast]), List (b ++ [blast])]
+eqv [_, _] = return $ Bool $ False
+eqv badArgs = throwError $ NumArgs 2 badArgs
