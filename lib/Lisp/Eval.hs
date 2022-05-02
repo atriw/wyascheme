@@ -1,10 +1,12 @@
 -- |
+{-# LANGUAGE ExistentialQuantification #-}
 
 module Lisp.Eval where
 
 import Lisp.Parse
 import Lisp.Types
-import Control.Monad.Except (MonadError(throwError), unless)
+import Control.Monad.Except (MonadError(throwError, catchError), unless)
+import Control.Applicative (Applicative(liftA2))
 
 eval :: LispVal -> ThrowsError LispVal
 eval val@(String _) = return val
@@ -55,7 +57,8 @@ primitives = [("+", numericBinop (+)),
               ("cdr", cdr),
               ("cons", cons),
               ("eq?", eqv),
-              ("eqv?", eqv)
+              ("eqv?", eqv),
+              ("equal?", equal)
              ]
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
@@ -136,6 +139,14 @@ cons [x, DottedList xs xlast] = return $ DottedList (x : xs) xlast
 cons [x1, x2] = return $ DottedList [x1] x2
 cons badArgs = throwError $ NumArgs 2 badArgs
 
+eqList :: ([LispVal] -> ThrowsError LispVal) -> [LispVal] -> [LispVal] -> Bool
+eqList f a b = length a == length b &&
+  all eqvPair (zip a b)
+  where
+    eqvPair (a, b) = case f [a, b] of
+      Right (Bool val) -> val
+      _ -> False
+
 eqv :: [LispVal] -> ThrowsError LispVal
 eqv [Atom a, Atom b] = return $ Bool $ a == b
 eqv [Number a, Number b] = return $ Bool $ a == b
@@ -143,12 +154,22 @@ eqv [String a, String b] = return $ Bool $ a == b
 eqv [Bool a, Bool b] = return $ Bool $ a == b
 eqv [Char a, Char b] = return $ Bool $ a == b
 eqv [Float a, Float b] = return $ Bool $ a == b
-eqv [List a, List b] = return $ Bool $ length a == length b &&
-  all eqvPair (zip a b)
-  where
-    eqvPair (a, b) = case eqv [a, b] of
-      Right (Bool val) -> val
-      _ -> False
+eqv [List a, List b] = return $ Bool $ eqList eqv a b
 eqv [DottedList a alast, DottedList b blast] = eqv [List (a ++ [alast]), List (b ++ [blast])]
-eqv [_, _] = return $ Bool $ False
+eqv [_, _] = return $ Bool False
 eqv badArgs = throwError $ NumArgs 2 badArgs
+
+data Unpacker = forall a . Eq a => AnyUnpacker (LispVal -> ThrowsError a)
+
+unpackEquals :: LispVal -> LispVal -> Unpacker -> ThrowsError Bool
+unpackEquals a b (AnyUnpacker unpacker) = liftA2 (==) (unpacker a) (unpacker b)
+  `catchError` const (return False)
+
+equal :: [LispVal] -> ThrowsError LispVal
+equal [List a, List b] = return $ Bool $ eqList equal a b
+equal [DottedList a alast, DottedList b blast] = equal [List (a ++ [alast]), List (b ++ [blast])]
+equal [a, b] = do
+  primitiveEquals <- or <$> traverse (unpackEquals a b) [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
+  eqvEquals <- eqv [a, b]
+  return $ Bool (primitiveEquals || let (Bool x) = eqvEquals in x)
+equal badArgs = throwError $ NumArgs 2 badArgs
