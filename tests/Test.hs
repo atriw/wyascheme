@@ -194,3 +194,7 @@ spec_eval =
       evalParse [r|(cond ((equal? 1 2) 3) (#t 4) (else 5))|] `shouldBeRight` Number 4
       evalParse [r|(cond 1 2 3)|] & shouldFail
       evalParse [r|(cond (#t 1) 2 (else 3))|] & shouldFail
+    it "evals case" $ do
+      evalParse [r|(case (* 1 2) ((1 3 5 7 9) 1) ((2 4 6 8) 2))|] `shouldBeRight` Number 2
+      evalParse [r|(case #t ((#f) 1) (else 2))|] `shouldBeRight` Number 2
+      evalParse [r|(case #t (1 2)))|] & shouldFail

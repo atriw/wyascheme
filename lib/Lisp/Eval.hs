@@ -26,6 +26,23 @@ eval (List (Atom "cond" : clauses)) = eval =<<
     clauseToIf (List [Atom "else", conseq]) _ = return conseq
     clauseToIf (List [pred, conseq]) (Right alt) = return $ List [Atom "if", pred, conseq, alt]
     clauseToIf clause _ = throwError $ BadSpecialForm "Bad cond clause" clause
+eval (List (Atom "case" : key : clauses)) = eval =<< foldr clauseToIf (return $ Bool False) clauses
+  where
+    clauseToIf :: LispVal -> ThrowsError LispVal -> ThrowsError LispVal
+    clauseToIf _ err@(Left _) = err
+    clauseToIf (List [Atom "else", conseq]) _ = return conseq
+    clauseToIf (List [datum, conseq]) (Right alt) = do
+      pred <- datumToPred datum
+      return $ List [Atom "if", pred, conseq, alt]
+    clauseToIf clause _ = throwError $ BadSpecialForm "Bad case clause" clause
+    datumToPred :: LispVal -> ThrowsError LispVal
+    datumToPred (List vals) = do
+      kval <- eval key
+      return $ List (Atom "cond" : (datumToClause kval <$> vals))
+    datumToPred datum = throwError $ BadSpecialForm "Bad case datum" datum
+    datumToClause :: LispVal -> LispVal -> LispVal
+    datumToClause kval v = List [List [Atom "eqv?", kval, v], Bool True]
+
 eval (List (Atom func : args)) = traverse eval args >>= apply func
 eval badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
 
