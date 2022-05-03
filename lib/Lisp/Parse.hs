@@ -1,4 +1,4 @@
-module Lisp.Parse where
+module Lisp.Parse(parseExpr, readExpr) where
 
 import Data.Foldable (find)
 import Data.Maybe (fromMaybe)

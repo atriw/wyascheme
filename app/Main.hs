@@ -1,20 +1,19 @@
 module Main where
 
 import Control.Monad (unless, (>=>))
-import Lisp.Eval
-import Lisp.Parse
-import Lisp.Types
 import System.IO (hFlush, stdout)
 import Control.Monad.Except (MonadIO (liftIO))
 
-main :: IO ()
-main = run
+import Lisp
 
-run :: IO ()
-run = do
+main :: IO ()
+main = primitiveBindings >>= run
+
+run :: Env -> IO ()
+run env = do
   input <- readPrompt "Lisp>>> "
   unless (input == "quit")
-    (nullEnv >>= flip evalAndPrint input >> run)
+    (evalAndPrint env input >> run env)
 
 flushStr :: String -> IO ()
 flushStr str = putStr str >> hFlush stdout

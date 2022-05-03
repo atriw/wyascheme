@@ -1,5 +1,6 @@
 -- |
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Lisp.Types where
 
@@ -17,7 +18,9 @@ data LispVal
   | Bool Bool
   | Char Char
   | Float Float
-  deriving Eq
+  | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+  | Func {params :: [String], vararg :: Maybe String, body :: [LispVal], closure :: Env}
+  | Any
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map show
@@ -32,9 +35,25 @@ instance Show LispVal where
   show (Bool False) = "#f"
   show (Char c) = "'" ++ [c] ++ "'"
   show (Float f) = show f
+  show (PrimitiveFunc _) = "<primitives>"
+  show Func {..} = "(lambda (" ++ unwords params ++ maybe "" (" . " ++) vararg ++ ") ...)"
+  show Any = "<any>"
+
+instance Eq LispVal where
+  Atom a == Atom b = a == b
+  List a == List b = a == b
+  DottedList a alast == DottedList b blast = a == b && alast == blast
+  Number a == Number b = a == b
+  String a == String b = a == b
+  Bool a == Bool b = a == b
+  Char a == Char b = a == b
+  Float a == Float b = a == b
+  Any == _ = True
+  _ == Any = True
+  _ == _ = False
 
 data LispError
-  = NumArgs Integer [LispVal]
+  = NumArgs Int [LispVal]
   | TypeMismatch String LispVal
   | Parser ParseError
   | BadSpecialForm String LispVal
