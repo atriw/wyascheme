@@ -14,9 +14,9 @@ let
         isLibrary = false;
         isExecutable = true;
         libraryHaskellDepends = [ base mtl parsec ];
-        executableHaskellDepends = [ base ];
+        executableHaskellDepends = [ base mtl ];
         testHaskellDepends = [
-          base hspec parsec raw-strings-qq tasty tasty-hspec
+          base hspec mtl parsec raw-strings-qq tasty tasty-hspec
         ];
         doHaddock = false;
         license = "unknown";

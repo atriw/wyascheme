@@ -8,43 +8,47 @@ import Lisp.Types
 import Control.Monad.Except (MonadError(throwError, catchError), unless)
 import Control.Applicative (Applicative(liftA2))
 
-eval :: LispVal -> ThrowsError LispVal
-eval val@(String _) = return val
-eval val@(Number _) = return val
-eval val@(Bool _) = return val
-eval val@(Atom _) = return val
-eval (List [Atom "quote", val]) = return val
-eval (List [Atom "if", pred, conseq, alt]) = do
-  result <- eval pred
+eval :: Env -> LispVal -> IOThrowsError LispVal
+eval _ val@(String _) = return val
+eval _ val@(Number _) = return val
+eval _ val@(Bool _) = return val
+eval env (Atom id)  = getVar env id
+eval _ (List [Atom "quote", val]) = return val
+eval env (List [Atom "if", pred, conseq, alt]) = do
+  result <- eval env pred
   case result of
-    (Bool False) -> eval alt
-    _ -> eval conseq
-eval (List (Atom "cond" : clauses)) = eval =<<
-  foldr clauseToIf (return $ Bool False) clauses
-  where
-    clauseToIf _ err@(Left _) = err
-    clauseToIf (List [Atom "else", conseq]) _ = return conseq
-    clauseToIf (List [pred, conseq]) (Right alt) = return $ List [Atom "if", pred, conseq, alt]
-    clauseToIf clause _ = throwError $ BadSpecialForm "Bad cond clause" clause
-eval (List (Atom "case" : key : clauses)) = eval =<< foldr clauseToIf (return $ Bool False) clauses
+    (Bool False) -> eval env alt
+    _ -> eval env conseq
+eval env (List (Atom "cond" : clauses)) = eval env =<<
+  liftThrows (foldr clauseToIf (return $ Bool False) clauses)
   where
     clauseToIf :: LispVal -> ThrowsError LispVal -> ThrowsError LispVal
     clauseToIf _ err@(Left _) = err
     clauseToIf (List [Atom "else", conseq]) _ = return conseq
-    clauseToIf (List [datum, conseq]) (Right alt) = do
-      pred <- datumToPred datum
-      return $ List [Atom "if", pred, conseq, alt]
-    clauseToIf clause _ = throwError $ BadSpecialForm "Bad case clause" clause
-    datumToPred :: LispVal -> ThrowsError LispVal
+    clauseToIf (List [pred, conseq]) (Right alt) = return $ List [Atom "if", pred, conseq, alt]
+    clauseToIf clause _ = throwError $ BadSpecialForm "Bad cond clause" clause
+eval env (List (Atom "case" : key : clauses)) = eval env =<< foldr clauseToIf (return $ Bool False) clauses
+  where
+    clauseToIf :: LispVal -> IOThrowsError LispVal -> IOThrowsError LispVal
+    clauseToIf clause acc = do
+      alt <- acc
+      case clause of
+        (List [Atom "else", conseq]) -> return conseq
+        (List [datum, conseq]) -> do
+          pred <- datumToPred datum
+          return $ List [Atom "if", pred, conseq, alt]
+        _ -> throwError $ BadSpecialForm "Bad case clause" clause
+    datumToPred :: LispVal -> IOThrowsError LispVal
     datumToPred (List vals) = do
-      kval <- eval key
+      kval <- eval env key
       return $ List (Atom "cond" : (datumToClause kval <$> vals))
     datumToPred datum = throwError $ BadSpecialForm "Bad case datum" datum
     datumToClause :: LispVal -> LispVal -> LispVal
     datumToClause kval v = List [List [Atom "eqv?", kval, v], Bool True]
-
-eval (List (Atom func : args)) = traverse eval args >>= apply func
-eval badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
+eval env (List [Atom "set!", Atom var, form]) = eval env form >>= setVar env var
+eval env (List [Atom "define", Atom var, form]) = eval env form >>= defineVar env var
+eval env (List (Atom func : args)) = traverse (eval env) args >>= liftThrows . apply func
+eval _ badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
 apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)

@@ -12,6 +12,9 @@ import Lisp.Types
 import Data.Either (isLeft)
 import Control.Monad ((>=>))
 import Data.Function ((&))
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.Except
+import Data.Traversable
 
 main :: IO()
 main = do
@@ -31,6 +34,12 @@ shouldBeRight a b = a `shouldBe` Right b
 
 shouldFail :: (Eq a, Show a, Show e) => Either e a -> Expectation
 shouldFail = (`shouldSatisfy` isLeft)
+
+shouldReturnRight :: (Eq a, Show a, Show e, Eq e) => ExceptT e IO a -> a -> Expectation
+shouldReturnRight a b = runExceptT a `shouldReturn` Right b
+
+shouldReturnFail :: (Eq a, Show a) => ExceptT LispError IO a -> Expectation
+shouldReturnFail a = runExceptT a `shouldReturn` Left (Default "")
 
 spec_parseString :: Spec
 spec_parseString =
@@ -114,87 +123,91 @@ spec_parseQuoted =
     it "parses quoted List" $
       parse parseExpr "" "'(1 #t #f)" `shouldBeRight` List [Atom "quote", List [Number 1, Bool True, Bool False]]
 
-buildFunc :: String -> [LispVal] -> LispVal
-buildFunc f args = List $ Atom f : args
+evalParse :: String -> IOThrowsError LispVal
+evalParse expr = liftIO nullEnv >>= flip evalParseEnv expr
 
-buildQuoted :: LispVal -> LispVal
-buildQuoted v = List [Atom "quote", v]
+evalParseEnv :: Env -> String -> IOThrowsError LispVal
+evalParseEnv env expr = liftThrows (readExpr expr) >>= eval env
 
-evalParse :: String -> ThrowsError LispVal
-evalParse = readExpr >=> eval
+evalParseSeq :: [String] -> IOThrowsError [LispVal]
+evalParseSeq exprs = liftIO nullEnv >>= for exprs . evalParseEnv
 
 spec_eval :: Spec
 spec_eval =
   describe "eval primitives" $ do
     it "evals String" $ do
-      eval (String "xxx") `shouldBeRight` String "xxx"
+      evalParse [r|"xxx"|] `shouldReturnRight` String "xxx"
     it "evals Number" $ do
-      eval (Number 1) `shouldBeRight` Number 1
+      evalParse [r|1|] `shouldReturnRight` Number 1
     it "evals Bool" $ do
-      eval (Bool True) `shouldBeRight` Bool True
-      eval (Bool False) `shouldBeRight` Bool False
+      evalParse [r|#t|] `shouldReturnRight` Bool True
+      evalParse [r|#f|] `shouldReturnRight` Bool False
     it "evals quoted" $ do
-      eval (buildFunc "quote" [Number 1]) `shouldBeRight` Number 1
+      evalParse [r|'1|] `shouldReturnRight` Number 1
     it "evals primitive functions" $ do
-      eval (buildFunc "+" [Number 1, Number 2]) `shouldBeRight` Number 3
-      eval (buildFunc "-" [Number 1, Number 10]) `shouldBeRight` Number (-9)
-      eval (buildFunc "mod" [String "21", String "2"]) `shouldBeRight` Number 1
-      eval (buildFunc "symbol?" [Atom "aaa"]) `shouldBeRight` Bool True
-      eval (buildFunc "string->symbol" [String "xxx"]) `shouldBeRight` Atom "xxx"
-      eval (buildFunc "symbol->string" [Atom "xxx"]) `shouldBeRight` String "xxx"
-      eval (buildFunc "string>?" [String "xxx", String "xxy"]) `shouldBeRight` Bool False
-      eval (buildFunc "&&" [Bool True, Bool False]) `shouldBeRight` Bool False
+      evalParse [r|(+ 1 2)|] `shouldReturnRight` Number 3
+      evalParse [r|(- 1 10)|] `shouldReturnRight` Number (-9)
+      evalParse [r|(mod 21 2)|] `shouldReturnRight` Number 1
+      evalParse [r|(symbol? 'aaa)|] `shouldReturnRight` Bool True
+      evalParse [r|(string->symbol "xxx")|] `shouldReturnRight` Atom "xxx"
+      evalParse [r|(symbol->string 'xxx)|] `shouldReturnRight` String "xxx"
+      evalParse [r|(string>? "xxx" "xxy")|] `shouldReturnRight` Bool False
+      evalParse [r|(&& #t #f)|] `shouldReturnRight` Bool False
     it "evals if" $ do
-      eval (List [Atom "if", Bool True, List [Atom "+", Number 2, Number 1], String "xxx"]) `shouldBeRight` Number 3
-      eval (List [Atom "if", String "", String "xxx", String "yyy"]) `shouldBeRight` String "xxx"
-      eval (List [Atom "if", List [Atom "=", Number 1, Number 2], String "xxx", String "yyy"]) `shouldBeRight` String "yyy"
+      evalParse [r|(if #t (+ 2 1) "xxx")|] `shouldReturnRight` Number 3
+      evalParse [r|(if "" "xxx" "yyy")|] `shouldReturnRight` String "xxx"
+      evalParse [r|(if (= 1 2) "xxx" "yyy")|] `shouldReturnRight` String "yyy"
     it "evals car" $ do
-      eval (buildFunc "car" [buildQuoted $ List [Number 1, Number 2]]) `shouldBeRight` Number 1
-      eval (buildFunc "car" [buildQuoted $ DottedList [Number 1, Number 2] (Number 3)]) `shouldBeRight` Number 1
-      eval (buildFunc "car" [buildQuoted $ List []]) & shouldFail
-      eval (buildFunc "car" [String "xxx"]) & shouldFail
-      eval (buildFunc "car" []) & shouldFail
-      eval (buildFunc "car" [buildQuoted $ List [String "xxx"], String "yyy"]) & shouldFail
+      evalParse [r|(car '(1 2))|] `shouldReturnRight` Number 1
+      evalParse [r|(car '(1 2 . 3))|] `shouldReturnRight` Number 1
+      evalParse [r|(car '())|] & shouldReturnFail
+      evalParse [r|(car "xxx")|] & shouldReturnFail
+      evalParse [r|(car)|] & shouldReturnFail
+      evalParse [r|(car '("xxx") "yyy")|] & shouldReturnFail
     it "evals cdr" $ do
-      eval (buildFunc "cdr" [buildQuoted $ List [Number 1, Number 2, Number 3]]) `shouldBeRight` List [Number 2, Number 3]
-      eval (buildFunc "cdr" [buildQuoted $ DottedList [Number 1, Number 2] (Number 3)]) `shouldBeRight` DottedList [Number 2] (Number 3)
-      eval (buildFunc "cdr" [buildQuoted $ DottedList [Number 1] (Number 2)]) `shouldBeRight` Number 2
-      eval (buildFunc "cdr" [buildQuoted $ List []]) & shouldFail
-      eval (buildFunc "cdr" [String "xxx"]) & shouldFail
-      eval (buildFunc "cdr" []) & shouldFail
-      eval (buildFunc "cdr" [buildQuoted $ List [String "xxx"], String "yyy"]) & shouldFail
+      evalParse [r|(cdr '(1 2 3))|] `shouldReturnRight` List [Number 2, Number 3]
+      evalParse [r|(cdr '(1 2 . 3))|] `shouldReturnRight` DottedList [Number 2] (Number 3)
+      evalParse [r|(cdr '(1 . 2))|] `shouldReturnRight` Number 2
+      evalParse [r|(cdr '())|] & shouldReturnFail
+      evalParse [r|(cdr "xxx")|] & shouldReturnFail
+      evalParse [r|(cdr)|] & shouldReturnFail
+      evalParse [r|(cdr '("xxx") "yyy")|] & shouldReturnFail
     it "evals cons" $ do
-      eval (buildFunc "cons" [String "xxx", buildQuoted $ List []]) `shouldBeRight` List [String "xxx"]
-      eval (buildFunc "cons" [String "xxx", buildQuoted $ List [Number 1]]) `shouldBeRight` List [String "xxx", Number 1]
-      eval (buildFunc "cons" [String "xxx", buildQuoted $ DottedList [Number 1, Number 2] (Number 3)]) `shouldBeRight` DottedList [String "xxx", Number 1, Number 2] (Number 3)
-      eval (buildFunc "cons" [String "xxx", String "yyy"]) `shouldBeRight` DottedList [String "xxx"] (String "yyy")
-      eval (buildFunc "cons" [Number 1]) & shouldFail
-      eval (buildFunc "cons" []) & shouldFail
-      eval (buildFunc "cons" [Number 1, Number 2, Number 3]) & shouldFail
+      evalParse [r|(cons "xxx" '())|] `shouldReturnRight` List [String "xxx"]
+      evalParse [r|(cons "xxx" '(1))|] `shouldReturnRight` List [String "xxx", Number 1]
+      evalParse [r|(cons "xxx" '(1 2 . 3))|] `shouldReturnRight` DottedList [String "xxx", Number 1, Number 2] (Number 3)
+      evalParse [r|(cons "xxx" "yyy")|] `shouldReturnRight` DottedList [String "xxx"] (String "yyy")
+      evalParse [r|(cons 1)|] & shouldReturnFail
+      evalParse [r|(cons)|] & shouldReturnFail
+      evalParse [r|(cons 1 2 3)|] & shouldReturnFail
     it "evals eq? and eqv?" $ do
-      eval (buildFunc "eq?" [String "xxx", String "xxx"]) `shouldBeRight` Bool True
-      eval (buildFunc "eqv?" [String "xxx", String "xxx"]) `shouldBeRight` Bool True
-      eval (buildFunc "eq?" [String "xxx", String "yyy"]) `shouldBeRight` Bool False
-      eval (buildFunc "eqv?" [String "xxx", String "yyy"]) `shouldBeRight` Bool False
-      eval (buildFunc "eq?" [String "xxx", Atom "xxx"]) `shouldBeRight` Bool False
-      eval (buildFunc "eqv?" [String "xxx", Atom "xxx"]) `shouldBeRight` Bool False
-      eval (buildFunc "eq?" [buildQuoted $ List [Number 1, String "xxx"], buildQuoted $ List [Number 1, String "xxx"]]) `shouldBeRight` Bool True
-      eval (buildFunc "eq?" [buildQuoted $ List [Number 1, String "xxx"], buildQuoted $ List [Number 1, Number 2]]) `shouldBeRight` Bool False
-      evalParse [r|(eq? '(1 2 3 . 4) '(1 2 3 . 4))|] `shouldBeRight` Bool True
-      evalParse [r|(eq? '(1 3 . 4) '(1 2 3 . 4))|] `shouldBeRight` Bool False
-      evalParse [r|(eq? 1)|] & shouldFail
+      evalParse [r|(eq? "xxx" "xxx")|] `shouldReturnRight` Bool True
+      evalParse [r|(eqv? "xxx" "xxx")|] `shouldReturnRight` Bool True
+      evalParse [r|(eq? "xxx" "yyy")|] `shouldReturnRight` Bool False
+      evalParse [r|(eqv? "xxx" "yyy")|] `shouldReturnRight` Bool False
+      evalParse [r|(eq? "1" 1)|] `shouldReturnRight` Bool False
+      evalParse [r|(eqv? "1" 1)|] `shouldReturnRight` Bool False
+      evalParse [r|(eq? '(1 "xxx") '(1 "xxx"))|] `shouldReturnRight` Bool True
+      evalParse [r|(eq? '(1 "xxx") '(1 2))|] `shouldReturnRight` Bool False
+      evalParse [r|(eq? '(1 2 3 . 4) '(1 2 3 . 4))|] `shouldReturnRight` Bool True
+      evalParse [r|(eq? '(1 3 . 4) '(1 2 3 . 4))|] `shouldReturnRight` Bool False
+      evalParse [r|(eq? 1)|] & shouldReturnFail
     it "evals equal?" $ do
-      evalParse [r|(equal? 1 "1")|] `shouldBeRight` Bool True
-      evalParse [r|(equal? 1 "2")|] `shouldBeRight` Bool False
-      evalParse [r|(equal? #t "True")|] `shouldBeRight` Bool True
-      evalParse [r|(equal? '(1 2 3) '(1 2 3))|] `shouldBeRight` Bool True
-      evalParse [r|(equal? '(1 "2" 3) '(1 2 3))|] `shouldBeRight` Bool True
-      evalParse [r|(equal? '(1 "2" 3 . 4) '(1 2 3 . "4"))|] `shouldBeRight` Bool True
+      evalParse [r|(equal? 1 "1")|] `shouldReturnRight` Bool True
+      evalParse [r|(equal? 1 "2")|] `shouldReturnRight` Bool False
+      evalParse [r|(equal? #t "True")|] `shouldReturnRight` Bool True
+      evalParse [r|(equal? '(1 2 3) '(1 2 3))|] `shouldReturnRight` Bool True
+      evalParse [r|(equal? '(1 "2" 3) '(1 2 3))|] `shouldReturnRight` Bool True
+      evalParse [r|(equal? '(1 "2" 3 . 4) '(1 2 3 . "4"))|] `shouldReturnRight` Bool True
     it "evals cond" $ do
-      evalParse [r|(cond ((equal? 1 2) 3) (#t 4) (else 5))|] `shouldBeRight` Number 4
-      evalParse [r|(cond 1 2 3)|] & shouldFail
-      evalParse [r|(cond (#t 1) 2 (else 3))|] & shouldFail
+      evalParse [r|(cond ((equal? 1 2) 3) (#t 4) (else 5))|] `shouldReturnRight` Number 4
+      evalParse [r|(cond 1 2 3)|] & shouldReturnFail
+      evalParse [r|(cond (#t 1) 2 (else 3))|] & shouldReturnFail
     it "evals case" $ do
-      evalParse [r|(case (* 1 2) ((1 3 5 7 9) 1) ((2 4 6 8) 2))|] `shouldBeRight` Number 2
-      evalParse [r|(case #t ((#f) 1) (else 2))|] `shouldBeRight` Number 2
-      evalParse [r|(case #t (1 2)))|] & shouldFail
+      evalParse [r|(case (* 1 2) ((1 3 5 7 9) 1) ((2 4 6 8) 2))|] `shouldReturnRight` Number 2
+      evalParse [r|(case #t ((#f) 1) (else 2))|] `shouldReturnRight` Number 2
+      evalParse [r|(case #t (1 2)))|] & shouldReturnFail
+    it "evals define, set! and get" $ do
+      evalParseSeq [[r|(define x 11)|], [r|x|]] `shouldReturnRight` [Number 11, Number 11]
+      evalParseSeq [[r|(define a "x")|], [r|(set! a 1)|], [r|a|]] `shouldReturnRight` [String "x", Number 1, Number 1]
+      evalParseSeq [[r|(set! a 1)|], [r|a|]] & shouldReturnFail
