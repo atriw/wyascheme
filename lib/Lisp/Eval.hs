@@ -5,10 +5,15 @@
 module Lisp.Eval (eval, apply, load) where
 
 import Control.Applicative (Applicative (liftA2))
-import Control.Monad.Except (MonadError (throwError), MonadIO (liftIO), join, when)
+import Control.Monad.Except (MonadError (throwError), MonadIO (liftIO), join, when, ExceptT, runExceptT)
 import Data.Maybe (isNothing)
 import Lisp.Parse
 import Lisp.Types
+import Control.Monad.Reader (asks)
+import System.FilePath ((</>))
+import Data.Foldable (traverse_)
+import System.IO.Error (tryIOError)
+import GHC.IO.Exception (IOException(IOError))
 
 eval :: Env -> LispVal -> EvalM LispVal
 eval _ val@(String _) = return val
@@ -86,4 +91,17 @@ makeVararg :: LispVal -> Env -> [LispVal] -> [LispVal] -> EvalM LispVal
 makeVararg = makeFunc . Just . show
 
 load :: String -> EvalM [LispVal]
-load filename = liftIO (readFile filename) >>= liftThrows . readExprList
+load filename = do
+  loadPaths <- asks loadPaths
+  let paths = (</> filename) <$> ("." : loadPaths)
+  result <- liftIO $ runExceptT $ traverse_ tryRead paths
+  case result of
+    (Left content) -> liftThrows $ readExprList content
+    (Right _) -> throwError $ FileNotFound filename
+  where
+    tryRead :: String -> ExceptT String IO IOError
+    tryRead path = do
+      result <- liftIO $ tryIOError (readFile path)
+      case result of
+        Left err -> return err
+        Right content -> throwError content

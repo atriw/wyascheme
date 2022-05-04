@@ -65,6 +65,7 @@ data LispError
   | BadSpecialForm String LispVal
   | NotFunction String String
   | UnboundVar String String
+  | FileNotFound String
   | Default String
 
 instance Eq LispError where
@@ -77,6 +78,7 @@ instance Show LispError where
   show (BadSpecialForm message form) = message ++ ": " ++ show form
   show (NotFunction message func) = message ++ ": " ++ show func
   show (UnboundVar message varname) = message ++ ": " ++ show varname
+  show (FileNotFound filename) = "File not found: " ++ filename
   show (Default message) = message
 
 type ThrowsError = Either LispError
@@ -87,19 +89,22 @@ data Config =
 type EvalM = ReaderT Config (ExceptT LispError IO)
 
 runEvalM :: EvalM a -> IO (ThrowsError a)
-runEvalM = flip runEvalMWith Config {loadPaths = []}
+runEvalM = runEvalMWith Config {loadPaths = []}
 
 runEvalMPrint :: Show a => EvalM a -> IO String
-runEvalMPrint = (extractVal . trapError <$>) . (fmap . fmap) show . runEvalM
+runEvalMPrint = runEvalMPrintWith Config {loadPaths = []}
+
+runEvalMWith :: Config -> EvalM a -> IO (ThrowsError a)
+runEvalMWith config m = runExceptT $ runReaderT m config
+
+runEvalMPrintWith :: Show a => Config -> EvalM a -> IO String
+runEvalMPrintWith config = (extractVal . trapError <$>) . (fmap . fmap) show . runEvalMWith config
   where
     trapError :: ThrowsError String -> ThrowsError String
     trapError action = catchError action (return . show)
     extractVal :: ThrowsError a -> a
     extractVal (Right val) = val
     extractVal _ = undefined
-
-runEvalMWith :: EvalM a -> Config -> IO (ThrowsError a)
-runEvalMWith m = runExceptT . runReaderT m
 
 liftThrows :: ThrowsError a -> EvalM a
 liftThrows (Left err) = throwError err

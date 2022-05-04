@@ -26,7 +26,8 @@ main = do
           spec_parseList,
           spec_parseQuoted,
           spec_env,
-          spec_eval
+          spec_eval,
+          spec_load
         ]
   defaultMain $ testGroup "All tests" [testGroup "Specs" specs]
 
@@ -235,3 +236,12 @@ spec_env = describe "env" $ do
           getVar env "a"
       )
       (String "yyy")
+
+spec_load :: Spec
+spec_load = describe "load" $ do
+  it "loads relative to current path" $ do
+    runEvalM (evalParse [r|(load "data/test.scm")|]) `shouldReturn` Right (Number 3)
+    runEvalM (evalParse [r|(load "test.scm")|]) `shouldReturn` Left (Default "")
+  it "loads relative to load paths" $ do
+    runEvalMWith (Config ["data"]) (evalParse [r|(load "test.scm")|]) `shouldReturn` Right (Number 3)
+    runEvalMWith (Config ["data"]) (evalParse [r|(load "data/test.scm")|]) `shouldReturn` Right (Number 3)
