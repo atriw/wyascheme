@@ -20,6 +20,7 @@ maintainer:         875241499@qq.com
 -- copyright:
 -- category:
 extra-source-files: CHANGELOG.md
+data-files: data
 
 executable wyascheme
     main-is:          Main.hs
@@ -31,6 +32,7 @@ executable wyascheme
     -- other-extensions:
     build-depends:    base ^>=4.14.3.0,
                       mtl,
+                      optparse-applicative,
                       lisp
     hs-source-dirs:   app
     default-language: Haskell2010

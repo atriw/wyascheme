@@ -1,19 +1,34 @@
 module Main where
 
+import Options.Applicative as Opt
 import Control.Monad (unless, (>=>))
-import System.IO (hFlush, stdout)
+import System.IO (hFlush, stdout, hPutStrLn, stderr)
 import Control.Monad.Except (MonadIO (liftIO))
 
 import Lisp
 
-main :: IO ()
-main = primitiveBindings >>= run
+data Params = Params (Maybe String)
 
-run :: Env -> IO ()
-run env = do
+mkParams :: Opt.Parser Params
+mkParams = Params <$>
+  optional (strOption (metavar "FILE" <> long "file" <> short 'f' <> help "File to load"))
+
+main :: IO ()
+main = execParser opts >>= run
+  where
+    opts = info (mkParams <**> helper)
+                (fullDesc <> progDesc "Scheme interpreter")
+
+run :: Params -> IO ()
+run (Params Nothing) = primitiveBindings >>= interactive
+run (Params (Just filename)) = primitiveBindings >>=
+  flip evalString ("(load \"" ++ filename ++ "\")") >>= hPutStrLn stderr
+
+interactive :: Env -> IO ()
+interactive env = do
   input <- readPrompt "Lisp>>> "
   unless (input == "quit")
-    (evalAndPrint env input >> run env)
+    (evalAndPrint env input >> interactive env)
 
 flushStr :: String -> IO ()
 flushStr str = putStr str >> hFlush stdout

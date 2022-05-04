@@ -8,6 +8,7 @@ import Control.Monad.Except
 import Text.ParserCombinators.Parsec (ParseError)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (isJust)
+import System.IO (Handle)
 
 data LispVal
   = Atom String
@@ -20,6 +21,8 @@ data LispVal
   | Float Float
   | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
   | Func {params :: [String], vararg :: Maybe String, body :: [LispVal], closure :: Env}
+  | IOFunc ([LispVal] -> IOThrowsError LispVal)
+  | Port Handle
   | Any
 
 unwordsList :: [LispVal] -> String
@@ -36,6 +39,8 @@ instance Show LispVal where
   show (Char c) = "'" ++ [c] ++ "'"
   show (Float f) = show f
   show (PrimitiveFunc _) = "<primitives>"
+  show (IOFunc _) = "<io func>"
+  show (Port _) = "<io port>"
   show Func {..} = "(lambda (" ++ unwords params ++ maybe "" (" . " ++) vararg ++ ") ...)"
   show Any = "<any>"
 

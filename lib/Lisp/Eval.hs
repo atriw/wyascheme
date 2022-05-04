@@ -3,13 +3,14 @@
 {-# LANGUAGE TupleSections #-}
 
 -- |
-module Lisp.Eval(eval, primitiveBindings) where
+module Lisp.Eval (eval, primitiveBindings) where
 
 import Control.Applicative (Applicative (liftA2))
-import Control.Monad.Except (MonadError (catchError, throwError), MonadIO (liftIO), unless, when, join)
+import Control.Monad.Except (MonadError (catchError, throwError), MonadIO (liftIO), join, unless, when)
 import Data.Maybe (isNothing)
 import Lisp.Parse
 import Lisp.Types
+import System.IO (IOMode(ReadMode, WriteMode), openFile, hClose, stdin, hGetLine, stdout, hPrint)
 
 eval :: Env -> LispVal -> IOThrowsError LispVal
 eval _ val@(String _) = return val
@@ -31,24 +32,21 @@ eval env (List (Atom "cond" : clauses)) =
     clauseToIf (List [Atom "else", conseq]) _ = return conseq
     clauseToIf (List [pred, conseq]) (Right alt) = return $ List [Atom "if", pred, conseq, alt]
     clauseToIf clause _ = throwError $ BadSpecialForm "Bad cond clause" clause
-eval env (List (Atom "case" : key : clauses)) =
+eval env (List (Atom "case" : key : clauses)) = do
+  kval <- eval env key
   eval env
-    =<< foldr clauseToIf (return $ Bool False) clauses
+    =<< liftThrows (foldr (clauseToIf kval) (return $ Bool False) clauses)
   where
-    clauseToIf :: LispVal -> IOThrowsError LispVal -> IOThrowsError LispVal
-    clauseToIf clause acc = do
-      alt <- acc
-      case clause of
-        (List [Atom "else", conseq]) -> return conseq
-        (List [datum, conseq]) -> do
-          pred <- datumToPred datum
-          return $ List [Atom "if", pred, conseq, alt]
-        _ -> throwError $ BadSpecialForm "Bad case clause" clause
-    datumToPred :: LispVal -> IOThrowsError LispVal
-    datumToPred (List vals) = do
-      kval <- eval env key
-      return $ List (Atom "cond" : (datumToClause kval <$> vals))
-    datumToPred datum = throwError $ BadSpecialForm "Bad case datum" datum
+    clauseToIf :: LispVal -> LispVal -> ThrowsError LispVal -> ThrowsError LispVal
+    clauseToIf _ _ err@(Left _) = err
+    clauseToIf _ (List [Atom "else", conseq]) _ = return conseq
+    clauseToIf kval (List [datum, conseq]) (Right alt) = do
+      pred <- datumToPred kval datum
+      return $ List [Atom "if", pred, conseq, alt]
+    clauseToIf _ clause _ = throwError $ BadSpecialForm "Bad case clause" clause
+    datumToPred :: LispVal -> LispVal -> ThrowsError LispVal
+    datumToPred kval (List vals) = return $ List (Atom "cond" : (datumToClause kval <$> vals))
+    datumToPred _ datum = throwError $ BadSpecialForm "Bad case datum" datum
     datumToClause :: LispVal -> LispVal -> LispVal
     datumToClause kval v = List [List [Atom "eqv?", kval, v], Bool True]
 eval env (List [Atom "set!", Atom var, form]) = eval env form >>= setVar env var
@@ -60,14 +58,13 @@ eval env (List [Atom "define", Atom var, form]) = eval env form >>= defineVar en
 eval env (List (Atom "lambda" : List params : body)) = makeNormalFunc env params body
 eval env (List (Atom "lambda" : DottedList params vararg : body)) = makeVararg vararg env params body
 eval env (List (Atom "lambda" : vararg@(Atom _) : body)) = makeVararg vararg env [] body
-eval env (List (func : args)) = do
-  func <- eval env func
-  args <- traverse (eval env) args
-  apply func args
+eval env (List [Atom "load", String filename]) = last <$> (load filename >>= traverse (eval env))
+eval env (List (func : args)) = join (liftA2 apply (eval env func) (traverse (eval env) args))
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
 apply (PrimitiveFunc func) args = liftThrows $ func args
+apply (IOFunc func) args = func args
 apply Func {..} args = do
   when
     ((length params /= length args) && isNothing vararg)
@@ -89,6 +86,19 @@ makeNormalFunc = makeFunc Nothing
 
 makeVararg :: LispVal -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeVararg = makeFunc . Just . show
+
+ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives =
+  [ ("apply", applyProc),
+    ("open-input-file", makePort ReadMode),
+    ("open-output-file", makePort WriteMode),
+    ("close-input-port", closePort),
+    ("close-output-port", closePort),
+    ("read", readProc),
+    ("write", writeProc),
+    ("read-contents", readContents),
+    ("read-all", readAll)
+  ]
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives =
@@ -127,7 +137,7 @@ primitives =
   ]
 
 primitiveBindings :: IO Env
-primitiveBindings = nullEnv >>= flip bindVars ((fmap . fmap) PrimitiveFunc primitives)
+primitiveBindings = nullEnv >>= flip bindVars ((fmap . fmap) PrimitiveFunc primitives ++ (fmap . fmap) IOFunc ioPrimitives)
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
 numericBinop op val@[_] = throwError $ NumArgs 2 val
@@ -246,3 +256,41 @@ equal [a, b] = do
   eqvEquals <- eqv [a, b]
   return $ Bool (primitiveEquals || let (Bool x) = eqvEquals in x)
 equal badArgs = throwError $ NumArgs 2 badArgs
+
+applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc [func, List args] = apply func args
+applyProc (func : args) = apply func args
+applyProc _ = undefined
+
+makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
+makePort mode [String filename] = Port <$> liftIO (openFile filename mode)
+makePort _ [badArg] = throwError $ TypeMismatch "filepath" badArg
+makePort _ badArgs = throwError $ NumArgs 1 badArgs
+
+closePort :: [LispVal] -> IOThrowsError LispVal
+closePort [Port port] = liftIO $ hClose port >> return (Bool True)
+closePort _ = return $ Bool False
+
+readProc :: [LispVal] -> IOThrowsError LispVal
+readProc [] = readProc [Port stdin]
+readProc [Port port] = liftIO (hGetLine port) >>= liftThrows . readExpr
+readProc [badArg] = throwError $ TypeMismatch "port" badArg
+readProc badArgs = throwError $ NumArgs 1 badArgs
+
+writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc [obj] = writeProc [obj, Port stdout]
+writeProc [obj, Port port] = liftIO (hPrint port obj) >> return (Bool True)
+writeProc badArgs = throwError $ NumArgs 2 badArgs
+
+readContents :: [LispVal] -> IOThrowsError LispVal
+readContents [String filename] = String <$> liftIO (readFile filename)
+readContents [badArg] = throwError $ TypeMismatch "filepath" badArg
+readContents badArgs = throwError $ NumArgs 1 badArgs
+
+load :: String -> IOThrowsError [LispVal]
+load filename = liftIO (readFile filename) >>= liftThrows . readExprList
+
+readAll :: [LispVal] -> IOThrowsError LispVal
+readAll [String filename] = List <$> load filename
+readAll [badArg] = throwError $ TypeMismatch "filepath" badArg
+readAll badArgs = throwError $ NumArgs 1 badArgs

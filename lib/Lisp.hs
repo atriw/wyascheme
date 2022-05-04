@@ -2,12 +2,9 @@
 
 module Lisp (
   P.readExpr,
-  P.parseExpr,
+  P.readExprList,
   E.eval,
   E.primitiveBindings,
-  evalParse,
-  evalParseSeq,
-  evalParsePrint,
   T.LispVal(..),
   T.LispError(..),
   T.Env,
@@ -16,7 +13,10 @@ module Lisp (
   T.nullEnv,
   T.defineVar,
   T.setVar,
-  T.getVar
+  T.getVar,
+  evalParse,
+  evalParseSeq,
+  evalParsePrint
   ) where
 
 import Control.Monad.IO.Class (MonadIO(liftIO))

@@ -4,8 +4,8 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, hspec, lib, mtl, parsec, raw-strings-qq
-      , tasty, tasty-hspec
+  f = { mkDerivation, base, hspec, lib, mtl, optparse-applicative
+      , parsec, raw-strings-qq, tasty, tasty-hspec
       }:
       mkDerivation {
         pname = "wyascheme";
@@ -13,8 +13,9 @@ let
         src = ./.;
         isLibrary = false;
         isExecutable = true;
+        enableSeparateDataOutput = true;
         libraryHaskellDepends = [ base mtl parsec ];
-        executableHaskellDepends = [ base mtl ];
+        executableHaskellDepends = [ base mtl optparse-applicative ];
         testHaskellDepends = [
           base hspec mtl parsec raw-strings-qq tasty tasty-hspec
         ];

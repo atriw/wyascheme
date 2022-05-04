@@ -1,4 +1,4 @@
-module Lisp.Parse(parseExpr, readExpr) where
+module Lisp.Parse(readExpr, readExprList) where
 
 import Data.Foldable (find)
 import Data.Maybe (fromMaybe)
@@ -15,10 +15,13 @@ spaces = skipMany1 space
 parseExpr :: Parser LispVal
 parseExpr = choice [parseString, parseNumber, parseChar, parseFloat, parseQuoted, parseListWrap, parseAtom]
 
-readExpr :: String -> ThrowsError LispVal
-readExpr expr = case parse parseExpr "lisp" expr of
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser expr = case parse parser "lisp" expr of
   Left err -> throwError $ Parser err
   Right val -> return val
+
+readExpr = readOrThrow parseExpr
+readExprList = readOrThrow (endBy parseExpr spaces)
 
 parseString :: Parser LispVal
 parseString = do
