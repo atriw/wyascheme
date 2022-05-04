@@ -9,6 +9,7 @@ import Text.ParserCombinators.Parsec (ParseError)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (isJust)
 import System.IO (Handle)
+import Control.Monad.Reader (ReaderT (runReaderT))
 
 data LispVal
   = Atom String
@@ -21,7 +22,7 @@ data LispVal
   | Float Float
   | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
   | Func {params :: [String], vararg :: Maybe String, body :: [LispVal], closure :: Env}
-  | IOFunc ([LispVal] -> IOThrowsError LispVal)
+  | IOFunc ([LispVal] -> EvalM LispVal)
   | Port Handle
   | Any
 
@@ -80,38 +81,46 @@ instance Show LispError where
 
 type ThrowsError = Either LispError
 
-trapError :: ThrowsError String -> ThrowsError String
-trapError action = catchError action (return . show)
+data Config =
+  Config {loadPaths :: [String]}
 
-extractVal :: ThrowsError a -> a
-extractVal (Right val) = val
-extractVal _ = undefined
+type EvalM = ReaderT Config (ExceptT LispError IO)
+
+runEvalM :: EvalM a -> IO (ThrowsError a)
+runEvalM = flip runEvalMWith Config {loadPaths = []}
+
+runEvalMPrint :: Show a => EvalM a -> IO String
+runEvalMPrint = (extractVal . trapError <$>) . (fmap . fmap) show . runEvalM
+  where
+    trapError :: ThrowsError String -> ThrowsError String
+    trapError action = catchError action (return . show)
+    extractVal :: ThrowsError a -> a
+    extractVal (Right val) = val
+    extractVal _ = undefined
+
+runEvalMWith :: EvalM a -> Config -> IO (ThrowsError a)
+runEvalMWith m = runExceptT . runReaderT m
+
+liftThrows :: ThrowsError a -> EvalM a
+liftThrows (Left err) = throwError err
+liftThrows (Right val) = return val
 
 type Env = IORef [(String, IORef LispVal)]
 
 nullEnv :: IO Env
 nullEnv = newIORef []
 
-type IOThrowsError = ExceptT LispError IO
-
-liftThrows :: ThrowsError a -> IOThrowsError a
-liftThrows (Left err) = throwError err
-liftThrows (Right val) = return val
-
-runIOThrows :: IOThrowsError String -> IO String
-runIOThrows action = extractVal . trapError <$> runExceptT action
-
 isBound :: Env -> String -> IO Bool
 isBound envRef var = isJust . lookup var <$> readIORef envRef
 
-getVar :: Env -> String -> IOThrowsError LispVal
+getVar :: Env -> String -> EvalM LispVal
 getVar envRef var = do
   env <- liftIO $ readIORef envRef
   maybe (throwError $ UnboundVar "Getting an unbound variable" var)
     (liftIO . readIORef)
     (lookup var env)
 
-setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+setVar :: Env -> String -> LispVal -> EvalM LispVal
 setVar envRef var val = do
   env <- liftIO $ readIORef envRef
   maybe (throwError $ UnboundVar "Setting an unbound variable" var)
@@ -119,7 +128,7 @@ setVar envRef var val = do
     (lookup var env)
   return val
 
-defineVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+defineVar :: Env -> String -> LispVal -> EvalM LispVal
 defineVar envRef var val = do
   alreadyDefined <- liftIO $ isBound envRef var
   if alreadyDefined

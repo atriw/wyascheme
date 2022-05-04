@@ -10,7 +10,7 @@ import Data.Maybe (isNothing)
 import Lisp.Parse
 import Lisp.Types
 
-eval :: Env -> LispVal -> IOThrowsError LispVal
+eval :: Env -> LispVal -> EvalM LispVal
 eval _ val@(String _) = return val
 eval _ val@(Number _) = return val
 eval _ val@(Bool _) = return val
@@ -60,7 +60,7 @@ eval env (List [Atom "load", String filename]) = last <$> (load filename >>= tra
 eval env (List (func : args)) = join (liftA2 apply (eval env func) (traverse (eval env) args))
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
 
-apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply :: LispVal -> [LispVal] -> EvalM LispVal
 apply (PrimitiveFunc func) args = liftThrows $ func args
 apply (IOFunc func) args = func args
 apply Func {..} args = do
@@ -76,14 +76,14 @@ apply Func {..} args = do
     bindVarArgs env = maybe (return env) (liftIO . bindVars env . (: []) . (,List remainingArgs))
 apply _ _ = undefined
 
-makeFunc :: Maybe String -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeFunc :: Maybe String -> Env -> [LispVal] -> [LispVal] -> EvalM LispVal
 makeFunc vararg closure vparams body = let params = show <$> vparams in return Func {..}
 
-makeNormalFunc :: Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeNormalFunc :: Env -> [LispVal] -> [LispVal] -> EvalM LispVal
 makeNormalFunc = makeFunc Nothing
 
-makeVararg :: LispVal -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeVararg :: LispVal -> Env -> [LispVal] -> [LispVal] -> EvalM LispVal
 makeVararg = makeFunc . Just . show
 
-load :: String -> IOThrowsError [LispVal]
+load :: String -> EvalM [LispVal]
 load filename = liftIO (readFile filename) >>= liftThrows . readExprList

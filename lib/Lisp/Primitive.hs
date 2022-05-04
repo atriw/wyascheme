@@ -13,7 +13,7 @@ import Lisp.Eval
 bindings :: IO Env
 bindings = nullEnv >>= flip bindVars ((fmap . fmap) PrimitiveFunc primitives ++ (fmap . fmap) IOFunc ioPrimitives)
 
-ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives :: [(String, [LispVal] -> EvalM LispVal)]
 ioPrimitives =
   [ ("apply", applyProc),
     ("open-input-file", makePort ReadMode),
@@ -180,37 +180,37 @@ equal [a, b] = do
   return $ Bool (primitiveEquals || let (Bool x) = eqvEquals in x)
 equal badArgs = throwError $ NumArgs 2 badArgs
 
-applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc :: [LispVal] -> EvalM LispVal
 applyProc [func, List args] = apply func args
 applyProc (func : args) = apply func args
 applyProc _ = undefined
 
-makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
+makePort :: IOMode -> [LispVal] -> EvalM LispVal
 makePort mode [String filename] = Port <$> liftIO (openFile filename mode)
 makePort _ [badArg] = throwError $ TypeMismatch "filepath" badArg
 makePort _ badArgs = throwError $ NumArgs 1 badArgs
 
-closePort :: [LispVal] -> IOThrowsError LispVal
+closePort :: [LispVal] -> EvalM LispVal
 closePort [Port port] = liftIO $ hClose port >> return (Bool True)
 closePort _ = return $ Bool False
 
-readProc :: [LispVal] -> IOThrowsError LispVal
+readProc :: [LispVal] -> EvalM LispVal
 readProc [] = readProc [Port stdin]
 readProc [Port port] = liftIO (hGetLine port) >>= liftThrows . readExpr
 readProc [badArg] = throwError $ TypeMismatch "port" badArg
 readProc badArgs = throwError $ NumArgs 1 badArgs
 
-writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc :: [LispVal] -> EvalM LispVal
 writeProc [obj] = writeProc [obj, Port stdout]
 writeProc [obj, Port port] = liftIO (hPrint port obj) >> return (Bool True)
 writeProc badArgs = throwError $ NumArgs 2 badArgs
 
-readContents :: [LispVal] -> IOThrowsError LispVal
+readContents :: [LispVal] -> EvalM LispVal
 readContents [String filename] = String <$> liftIO (readFile filename)
 readContents [badArg] = throwError $ TypeMismatch "filepath" badArg
 readContents badArgs = throwError $ NumArgs 1 badArgs
 
-readAll :: [LispVal] -> IOThrowsError LispVal
+readAll :: [LispVal] -> EvalM LispVal
 readAll [String filename] = List <$> load filename
 readAll [badArg] = throwError $ TypeMismatch "filepath" badArg
 readAll badArgs = throwError $ NumArgs 1 badArgs

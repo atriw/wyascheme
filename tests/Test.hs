@@ -30,17 +30,17 @@ main = do
         ]
   defaultMain $ testGroup "All tests" [testGroup "Specs" specs]
 
-shouldBeRight :: (Eq a, Show a, Show e, Eq e) => Either e a -> a -> Expectation
+shouldBeRight :: (Eq a, Show a) => ThrowsError a -> a -> Expectation
 shouldBeRight a b = a `shouldBe` Right b
 
-shouldFail :: (Eq a, Show a, Show e) => Either e a -> Expectation
+shouldFail :: (Eq a, Show a) => ThrowsError a -> Expectation
 shouldFail = (`shouldSatisfy` isLeft)
 
-shouldReturnRight :: (Eq a, Show a, Show e, Eq e) => ExceptT e IO a -> a -> Expectation
-shouldReturnRight a b = runExceptT a `shouldReturn` Right b
+shouldReturnRight :: (Eq a, Show a) => EvalM a -> a -> Expectation
+shouldReturnRight a b = runEvalM a `shouldReturn` Right b
 
-shouldReturnFail :: (Eq a, Show a) => ExceptT LispError IO a -> Expectation
-shouldReturnFail a = runExceptT a `shouldReturn` Left (Default "")
+shouldReturnFail :: (Eq a, Show a) => EvalM a -> Expectation
+shouldReturnFail a = runEvalM a `shouldReturn` Left (Default "")
 
 spec_parseString :: Spec
 spec_parseString =

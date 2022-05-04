@@ -8,8 +8,12 @@ module Lisp (
   T.LispVal(..),
   T.LispError(..),
   T.Env,
+  T.Config,
+  T.ThrowsError,
+  T.EvalM,
   T.liftThrows,
-  T.runIOThrows,
+  T.runEvalM,
+  T.runEvalMPrint,
   T.nullEnv,
   T.defineVar,
   T.setVar,
@@ -27,14 +31,14 @@ import qualified Lisp.Parse as P
 import qualified Lisp.Eval as E
 import qualified Lisp.Primitive as Pri
 
-evalParse :: String -> T.IOThrowsError T.LispVal
+evalParse :: String -> T.EvalM T.LispVal
 evalParse expr = liftIO Pri.bindings >>= flip evalParseEnv expr
 
-evalParseEnv :: T.Env -> String -> T.IOThrowsError T.LispVal
+evalParseEnv :: T.Env -> String -> T.EvalM T.LispVal
 evalParseEnv env expr = T.liftThrows (P.readExpr expr) >>= E.eval env
 
-evalParseSeq :: [String] -> T.IOThrowsError [T.LispVal]
+evalParseSeq :: [String] -> T.EvalM [T.LispVal]
 evalParseSeq exprs = liftIO Pri.bindings >>= for exprs . evalParseEnv
 
 evalParsePrint :: String -> IO String
-evalParsePrint expr = T.runIOThrows $ show <$> evalParse expr
+evalParsePrint expr = T.runEvalMPrint $ evalParse expr
