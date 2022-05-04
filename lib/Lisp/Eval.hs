@@ -63,6 +63,14 @@ eval env (List (Atom "lambda" : List params : body)) = makeNormalFunc env params
 eval env (List (Atom "lambda" : DottedList params vararg : body)) = makeVararg vararg env params body
 eval env (List (Atom "lambda" : vararg@(Atom _) : body)) = makeVararg vararg env [] body
 eval env (List [Atom "load", String filename]) = last <$> (load filename >>= traverse (eval env))
+eval env (List (Atom "let" : List bindings : body)) = do
+  (params, args) <- liftThrows $ unzip <$> traverse binding bindings
+  eval env (List (List (Atom "lambda" : List params : body) : args))
+  where
+    binding :: LispVal -> ThrowsError (LispVal, LispVal)
+    binding (List [param, arg]) = return (param, arg)
+    binding badBinding = throwError $ BadSpecialForm "Bad let binding" badBinding
+eval env (List (Atom "begin" : body)) = last <$> traverse (eval env) body
 eval env (List (func : args)) = join (liftA2 apply (eval env func) (traverse (eval env) args))
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized bad special form" badForm
 
