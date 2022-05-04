@@ -19,6 +19,7 @@ eval :: Env -> LispVal -> EvalM LispVal
 eval _ val@(String _) = return val
 eval _ val@(Number _) = return val
 eval _ val@(Bool _) = return val
+eval _ val@(Char _) = return val
 eval env (Atom id) = getVar env id
 eval _ (List [Atom "quote", val]) = return val
 eval env (List [Atom "if", pred, conseq, alt]) = do

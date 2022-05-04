@@ -23,7 +23,8 @@ ioPrimitives =
     ("read", readProc),
     ("write", writeProc),
     ("read-contents", readContents),
-    ("read-all", readAll)
+    ("read-all", readAll),
+    ("display", display)
   ]
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
@@ -214,3 +215,8 @@ readAll :: [LispVal] -> EvalM LispVal
 readAll [String filename] = List <$> load filename
 readAll [badArg] = throwError $ TypeMismatch "filepath" badArg
 readAll badArgs = throwError $ NumArgs 1 badArgs
+
+display :: [LispVal] -> EvalM LispVal
+display [String s] = writeProc [Atom s]
+display [Char s] = writeProc [Atom [s]]
+display v = writeProc v
