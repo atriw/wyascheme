@@ -62,14 +62,17 @@ liftReadS reader =
     parsed = null . snd
 
 parseNumber :: Parser LispVal
-parseNumber = choice (try <$> [parseDecimal, parseOct, parseHex])
+parseNumber = try (char '-' >> parseSignNumber (-1)) <|> parseSignNumber 1
+
+parseSignNumber :: Integer -> Parser LispVal
+parseSignNumber sign = choice (try <$> [parseDecimal, parseOct, parseHex])
   where
     parseDecimal :: Parser LispVal
-    parseDecimal = Number . read <$> (optional (string "#d") >> many1 digit)
+    parseDecimal = Number . (*sign) . read <$> (optional (string "#d") >> many1 digit)
     parseOct :: Parser LispVal
-    parseOct = Number <$> (string "#o" >> many1 octDigit >>= liftReadS readOct)
+    parseOct = Number . (*sign) <$> (string "#o" >> many1 octDigit >>= liftReadS readOct)
     parseHex :: Parser LispVal
-    parseHex = Number <$> (string "#x" >> many1 hexDigit >>= liftReadS readHex)
+    parseHex = Number . (*sign) <$> (string "#x" >> many1 hexDigit >>= liftReadS readHex)
 
 parseChar :: Parser LispVal
 parseChar = try (string "#\\" >> choice (try <$> [parseCharName, parseCharLit]))
