@@ -2,3 +2,12 @@
 
 * Write you a scheme
 [[https://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours][Write you a scheme]]
+
+* TODO Standard library [0/3]
++ [ ] error
++ [ ] hash table
++ [ ] math
+
+* TODO Special form [0/2]
++ [ ] let*
++ [ ] letrec
