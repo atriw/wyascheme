@@ -20,8 +20,8 @@ main = execParser opts >>= run
                 (fullDesc <> progDesc "Scheme interpreter")
 
 run :: Params -> IO ()
-run (Params Nothing) = primitiveBindings >>= interactive
-run (Params (Just filename)) = primitiveBindings >>=
+run (Params Nothing) = bindings >>= interactive
+run (Params (Just filename)) = bindings >>=
   flip evalString ("(load \"" ++ filename ++ "\")") >>= hPutStrLn stderr
 
 interactive :: Env -> IO ()
